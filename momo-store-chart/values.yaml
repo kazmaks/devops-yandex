@@ -1,0 +1,63 @@
+# http://nexus.praktikum-services.tech/repository/momo-store-helm-maksim-kazanov/
+
+# Default values for momo-store-chart
+
+global:
+  revisionHistoryLimit: 12
+  replicaCount: 2
+
+CR_SECRET: ""
+
+# BACKEND
+backend:
+  # Deploy strategy settings
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 20%
+  # Вместо latest правильнее использовать версию .Chart.AppVersion в шаблоне
+  image:
+    repository: gitlab.praktikum-services.ru:5050/std-028-16/momo-store/momo-backend
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: 1.0.1472019
+    pullPolicy: IfNotPresent
+  # Environment settings
+  env:
+    - name: REPORT_PATH
+      value: "/var/www-data/htdocs"
+  # Port number listen
+  service:
+    port: 8081
+  # Liveness probe settings
+  livenessProbe:
+    # проверка живучести выполнит запрос HTTP GET       
+    httpGet:
+      # путь к запросу в HTTP-запросе          
+      path: /health
+      # порт, к которому должна подключиться проверка        
+      port: 8081
+    # перед исполнением первой проверки подождать 15 секунд, пока стартанёт бэкенд          
+    initialDelaySeconds: 15
+    # период выполнения проверки
+    periodSeconds: 30
+    # максимальное время выполнения проверки (по умолчанию 1 раз)
+    timeoutSeconds: 2
+    # сколько раз пробовать попытку, если она провалилась (по умолчанию 1 раз)
+    failureThreshold: 6
+
+# FRONTEND
+frontend:
+  image:
+    repository: gitlab.praktikum-services.ru:5050/std-028-16/momo-store/momo-frontend
+    tag: 1.0.1473625
+    pullPolicy: IfNotPresent
+  # Port number listen
+  service:
+    port: 80
+  # TLS Cert Settings
+  fqdn: momo-store-ru.ru
+  tls:
+    - hosts:
+      - '*.momo-store-ru.ru'
+      secretName: momo-store-cert-ya-secret

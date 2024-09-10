@@ -1,0 +1,42 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  revisionHistoryLimit: 12
+  # Стратегия развёртывания. Recreate — удалит сначала все старые Pod'ы 
+  # Есть и более гибкая стратегии, например, RollingUpdate, которая будет обновлять Pod'ы порциями  
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    # шаблон для создания Pod'ов
+    spec:
+      containers:
+      - image: gitlab.praktikum-services.ru:5050/std-028-16/momo-store/momo-frontend:1.0.1473625
+        name: frontend
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+          readOnly: true
+        ports:
+        - name: frontend
+          containerPort: 80
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: nginx-conf
+      # Чтобы Кубер мог скачивать образы из нашего GitLab Registry
+      imagePullSecrets:
+      - name: gitlab-cr-secret

@@ -1,0 +1,26 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: momo-store-cert-ya
+  namespace: default
+spec:
+  secretTemplate:
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+      reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces: "cicd,monitoring"  # Control destination namespaces
+      reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true" # Auto create reflection for matching namespaces
+      reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: "cicd,monitoring" # Control auto-reflection namespaces
+  secretName: momo-store-cert-ya-secret
+  issuerRef:
+    # ClusterIssuer, созданный вместе с Yandex Cloud DNS ACME webhook.
+    name: yc-clusterissuer
+    kind: ClusterIssuer
+  commonName: 'momo-store-ru.ru'
+  dnsNames:
+    # Домен должен входить в вашу публичную зону Cloud DNS.
+    # Указывается имя домена (например, test.example.com), а не имя DNS-записи.
+    # Перечислено вместо *.momo-store-ru.ru из-за лимита перевыпуска.
+    - 'momo-store-ru.ru'
+    - 'prometheus.momo-store-ru.ru'
+    - 'grafana.momo-store-ru.ru'
+    - 'argocd.momo-store-ru.ru'

@@ -1,0 +1,61 @@
+name: microservice_test
+  
+services:
+  backend-green:
+    image: ${CI_REGISTRY_IMAGE}/momo-backend:${VERSION}
+    restart: always
+    # container_name у backend удаляем, чтобы работало обращение по имени VIRTUAL_HOST
+    environment:
+      VIRTUAL_HOST: "backend"
+      VIRTUAL_PORT: "8081"
+      REPORT_PATH: ${REPORT_PATH}
+    # healthcheck:
+    #   test: curl --fail -s http://localhost:8080/actuator/health
+
+    # curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8081/health
+
+    #   interval: 30s
+    #   timeout: 10s
+    #   start_period: 20s
+    deploy:
+      replicas: ${REPLICAS_GREEN:-0}
+    networks:
+      - momo-store
+
+  backend-blue:
+    image: ${CI_REGISTRY_IMAGE}/momo-backend:${VERSION}
+    restart: always
+    # container_name у backend удаляем, чтобы работало обращение по имени VIRTUAL_HOST
+    environment:
+      VIRTUAL_HOST: "backend"
+      VIRTUAL_PORT: "8081"
+      REPORT_PATH: ${REPORT_PATH}
+    # healthcheck:
+    #   test: curl --fail -s http://localhost:8080/actuator/health
+    #   interval: 30s
+    #   timeout: 10s
+    #   start_period: 20s
+    #   retries: 6 
+    deploy:
+      replicas: ${REPLICAS_BLUE:-0}
+    networks:
+      - momo-store
+
+
+  frontend:
+    image: ${CI_REGISTRY_IMAGE}/momo-frontend:${VERSION}
+    container_name: momo-store-frontend
+    restart: always
+    environment:
+      DEFAULT_HOST: "backend"
+      NODE_ENV: "production"
+      VUE_APP_API_URL: "http://localhost:8081"
+    ports:
+      - "80:80"
+    networks:
+      - momo-store
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+
+networks:
+  momo-store:

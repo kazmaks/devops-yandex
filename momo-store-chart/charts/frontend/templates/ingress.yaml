@@ -1,0 +1,25 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Chart.Name }}
+  namespace: {{ .Release.Namespace }}
+  # annotations:
+  #   cert-manager.io/cluster-issuer: yc-clusterissuer
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "{{ .Values.fqdn }}"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          # Заранее создан сервис типа ClusterIP
+          # Он выступает в качестве бэкенда нашего Ingress
+          service:
+            name: {{ .Chart.Name }}
+            port:
+              # У сервиса может быть несколько портов, указываем нужный нам
+              number: {{.Values.service.port }}
+  tls: {{ toYaml .Values.tls | nindent 4 }}

@@ -1,0 +1,132 @@
+.go-cache:
+   variables:
+      GOPATH: $CI_PROJECT_DIR/.go
+   before_script:
+      - mkdir -p .go
+   cache:
+      paths:
+         - .go/pkg/mod/
+
+
+variables:
+   VERSION: 1.0.${CI_PIPELINE_ID}
+   GO_REPO_PATH: ${CI_PROJECT_DIR}/.go
+   SCV: ${NEXUS_REPO_URL}/repository/${NEXUS_REPO_BACKEND_NAME}/com/yandex/practicum/devops/momo-store/${VERSION}/momo-store-${VERSION}.jar
+   GITLAB_ADVANCED_SAST_ENABLED: 'true'
+
+stages:
+   - build
+   - test
+   - release
+   - deploy
+   - notify
+
+
+build-backend:
+   stage: build
+   image:
+      name: gcr.io/kaniko-project/executor:v1.23.2-debug
+      entrypoint: [""]
+   # переменные CI_REGISTRY_USER, CI_REGISTRY_PASSWORD, CI_REGISTRY генерятся Гитлабом, их задавать не надо
+  # extends: .go-cache
+   script:
+      - echo "Kaniko Build Momo-Store in ${CI_PROJECT_DIR}"
+      - /kaniko/executor
+         --context "${CI_PROJECT_DIR}/backend"
+         --dockerfile "${CI_PROJECT_DIR}/backend/Dockerfile"
+         --destination "${CI_REGISTRY_IMAGE}/momo-backend:${CI_COMMIT_SHA}"
+         --build-arg VERSION=${VERSION}
+         --cache=true
+
+
+semgrep-sast:
+   stage: test
+   needs:
+      - build-backend
+   variables:
+      COMPILE: "false"
+   trigger:
+      include:
+         - template: Jobs/SAST.gitlab-ci.yml
+
+
+sonarqube-backend-sast:
+   stage: test
+   needs:
+      - build-backend
+   image: sonarsource/sonar-scanner-cli:latest
+   variables:
+      # Defines the location of the analysis task cache
+      SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+      # Tells git to fetch all the branches of the project, required by the analysis task
+      GIT_DEPTH: "0"
+   cache:
+      key: "${CI_JOB_NAME}"
+      paths:
+         - .sonar/cache
+   script:
+      - >
+         sonar-scanner
+         -Dsonar.projectBaseDir=./backend/
+         -Dsonar.qualitygate.wait=true
+         -Dsonar.projectKey=${SONAR_PROJECT_KEY_BACK}
+         -Dsonar.host.url=${SONARQUBE_URL}
+         -Dsonar.login=${SONAR_LOGIN}
+         -Dsonar.projectName=${SONAR_PROJECT_NAME_BACK}
+   allow_failure: true
+
+
+upload-backend:
+   stage: release
+   needs:
+      - build-backend
+      # - semgrep-sast
+      # - sonarqube-backend-sast
+   variables:
+      GIT_STRATEGY: none
+   image:
+      name: gcr.io/go-containerregistry/crane:debug
+      entrypoint: [""]
+   cache: [ ]
+   before_script:
+      - crane auth login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+   script:
+      - crane tag ${CI_REGISTRY_IMAGE}/momo-backend:${CI_COMMIT_SHA} ${VERSION}
+
+  
+deploy-backend:
+   stage: deploy
+   needs:
+      - upload-backend
+   image: alpine:3.18
+   before_script:
+      - apk add openssh-client bash gettext
+      - eval $(ssh-agent -s)
+      - echo "${SSH_PRIVATE_KEY}" | tr -d '\r' | ssh-add -
+      - mkdir -p ~/.ssh
+      - chmod 600 ~/.ssh
+      - echo "${SSH_KNOWN_HOSTS}" >> ~/.ssh/known_hosts
+      - chmod 644 ~/.ssh/known_hosts
+   script:
+      - > 
+         scp ./docker-compose.yml
+         ${DEV_USER}@${DEV_HOST}:/home/${DEV_USER}/docker-compose.yml
+      # подставим переменные в скрипт deploy.sh и выполним его на целевом хосте.
+      - envsubst < ./backend/deploy.sh | ssh ${DEV_USER}@${DEV_HOST}
+   rules: # Запускаем джобу вручную.
+      - when: manual
+   environment:
+      name: production/backend
+
+
+telegram-notification-backend:
+   stage: notify
+   needs:
+      - upload-backend
+   rules:
+      - if: $CI_COMMIT_MESSAGE =~ /send notification/
+   script:
+      - >
+         curl -X POST -H "Content-type: application/json"
+         --data "{\"chat_id\": \"-1002100383038\", \"text\": \"Казанов Максим загрузил backend в Nexus. Скачать ${SCV}\"}"
+         https://api.telegram.org/bot5933756043:AAE8JLL5KIzgrNBeTP5e-1bkbJy4YRoeGjs/sendMessage

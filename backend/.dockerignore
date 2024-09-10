@@ -1,0 +1,4 @@
+.dockerignore
+.gitlab-ci.yml
+deploy.sh
+Dockerfile

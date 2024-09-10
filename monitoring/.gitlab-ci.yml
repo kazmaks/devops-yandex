@@ -1,0 +1,34 @@
+stages:
+   - deploy
+
+
+deploy-prometheus:
+   stage: deploy
+   image: alpine/helm:3.15.3
+   before_script:
+      - apk add curl
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+      - mkdir ~/.kube
+      - echo "$KUBE_CONFIG" | base64 -d > ~/.kube/config
+   script:
+      # Check info
+      - kubectl version --client
+      - helm version
+      # Install helm chart from dir
+      - cd ./monitoring
+      # Add repo
+      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts && helm repo update
+      # Install prometheus Grafana stack
+      - >
+         helm upgrade --install -n monitoring --create-namespace 
+         --atomic --timeout 10m -f ./kube-prometheus-stack/values.yml
+         prometheus-stack prometheus-community/kube-prometheus-stack
+      # Setup pod monitoring
+      - kubectl apply -f ./kube-prometheus-stack/setup-job
+      - echo "--==SHOW SVC==--"
+      - kubectl get svc -n monitoring
+      - rm ~/.kube/config
+   # Запускаем джобу вручную.
+   when: manual
+   allow_failure: true

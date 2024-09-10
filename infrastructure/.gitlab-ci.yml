@@ -1,0 +1,79 @@
+# Настройка версии terraform
+image:
+  name: hashicorp/terraform:1.9.5
+  entrypoint:
+    - '/usr/bin/env'
+    - 'PATH=/usr/local/sbin:usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+cache:
+  paths:
+    - .terraform
+
+variables:
+  YC_SERVICE_ACCOUNT_KEY_FILE: /tmp/sa-key.json
+
+before_script:
+  - |
+    cat <<EOF >> ~/.terraformrc
+    provider_installation {
+      network_mirror {
+        url = "https://terraform-mirror.yandexcloud.net/"
+        include = ["registry.terraform.io/*/*"]
+      }
+      direct {
+        exclude = ["registry.terraform.io/*/*"]
+      }
+    }
+    EOF
+  - cd ./infrastructure
+  - terraform init
+  - echo $YC_KEY > /tmp/sa-key.json
+
+
+stages:
+  - validate
+  - lint
+  - plan
+  - apply
+
+
+tf-validate:
+  stage: validate
+  script:
+    - terraform validate
+
+
+lint-chekov:
+  stage: lint
+  image:
+    name: bridgecrew/checkov:3.2.234
+    entrypoint:
+      - '/usr/bin/env'
+      - 'PATH=/usr/local/sbin:usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+  before_script:
+    # Переопределяем глобальный before_script
+    - echo "Start Lint Chekov"
+  script:
+    - checkov -d ./infrastructure --download-external-modules true
+  allow_failure: true
+
+
+tf-plan:
+  stage: plan
+  needs:
+    - tf-validate
+  script:
+    - terraform plan -out="plan-iac"
+  artifacts:
+    paths:
+      - ./infrastructure/plan-iac
+
+
+tf-apply:
+  stage: apply
+  needs:
+    - tf-plan
+  script:
+    - terraform apply -auto-approve "plan-iac"
+  rules:
+    - when: manual

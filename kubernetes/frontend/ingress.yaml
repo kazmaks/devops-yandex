@@ -1,0 +1,28 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend
+  annotations:
+    cert-manager.io/cluster-issuer: "dns01-cluster-issuer"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - momo-store-ru.ru
+    - argocd.momo-store-ru.ru
+  #  secretName: wcard-momo-secret
+  rules:
+  - host: momo-store-ru.ru
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          # Заранее создан сервис типа ClusterIP
+          # Он выступает в качестве бэкенда нашего Ingress
+          service:
+            name: frontend
+            port:
+              # У сервиса может быть несколько портов, указываем нужный нам
+              number: 80

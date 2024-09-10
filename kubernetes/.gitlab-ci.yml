@@ -1,0 +1,35 @@
+stages:
+   - deploy
+
+deploy-kuber-frontend:
+   stage: deploy
+   image: alpine:latest
+   before_script:
+      - apk add curl gettext
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+      - mkdir ~/.kube
+      - echo "$KUBE_CONFIG" | base64 -d > ~/.kube/config
+   script:
+      # Check info
+      - kubectl version --client
+      
+      # Starting backend service
+      # Для подстановки переменных из Gitlab
+      # - envsubst < ./kubernetes/backend/deployment.yaml | tee ./kubernetes/backend/deployment.yaml > /dev/null
+      - kubectl apply -n default -f ./kubernetes/backend
+      
+      # Starting frontend service
+      - kubectl wait  -n default --for=condition=ready pod -l app=backend
+      - kubectl apply -n default -f ./kubernetes/frontend
+      
+      # Show objects kubernetes
+      - echo "--==SHOW METRICS PODS==--"
+      - kubectl get svc,ing,po -o wide -n default
+      - rm ~/.kube/config
+   environment:
+      name: kubernetes/frontend
+      url: https://momo-store-ru.ru
+   # Запускаем джобу вручную
+   when: manual
+   allow_failure: true

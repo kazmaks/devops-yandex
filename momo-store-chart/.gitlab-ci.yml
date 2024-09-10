@@ -1,0 +1,59 @@
+variables:
+   BUILD: 0.1.9
+stages:
+   - upload
+   - deploy
+
+
+upload-helm-chart:
+   stage: upload
+   image: alpine/helm:3.15.3
+   before_script:
+      - apk add curl
+   script:
+      # Check info
+      - helm version
+      # Package Helm Chart
+      - helm package ./momo-store-chart
+      # Add helm repo
+      - >
+         curl -u ${NEXUS_REPO_USER}:${NEXUS_REPO_PASS}
+         https://nexus.praktikum-services.tech/repository/momo-store-helm-maksim-kazanov/ 
+         --upload-file ./momo-store-${BUILD}.tgz
+
+
+deploy-helm-chart:
+   stage: deploy
+   image: alpine/helm:3.15.3
+   needs:
+      - upload-helm-chart
+   before_script:
+      - apk add curl
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+      - mkdir ~/.kube
+      - echo "$KUBE_CONFIG" | base64 -d > ~/.kube/config
+   script:
+      # Check info
+      - kubectl version --client
+      - helm version
+      # Add helm repo
+      - >
+         helm repo add momo-store-nexus
+         http://nexus.praktikum-services.tech/repository/momo-store-helm-maksim-kazanov/ 
+         --username ${NEXUS_REPO_USER} --password ${NEXUS_REPO_PASS} && helm repo update
+      # Install helm chart from repo
+      - >
+         helm upgrade --install momo-store
+         --set frontend.fqdn="momo-store-ru.ru" 
+         --set CR_SECRET=${CR_SECRET}
+         --atomic --timeout 10m 
+         momo-store-nexus/momo-store -n default
+      - echo "--==SHOW METRICS==--"
+      - helm list -n default
+      - rm ~/.kube/config
+   environment:
+      name: helm/momo-store
+      url: https://momo-store-ru.ru
+   # Запускаем джобу вручную
+   when: manual
